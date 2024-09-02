@@ -1,55 +1,53 @@
 # src/preprocessing.py
 
-import re
-import nltk
 import pandas as pd
+import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from sklearn.feature_extraction.text import TfidfVectorizer
+import re
 
-# Ensure you download necessary resources
 nltk.download('stopwords')
 nltk.download('wordnet')
 
-# Initialize the stop words and lemmatizer
-stop_words = set(stopwords.words('english'))
-lemmatizer = WordNetLemmatizer()
-
-
 def clean_text(text):
+    """ Clean and preprocess text data """
+    # Initialize the stop words and lemmatizer
+    stop_words = set(stopwords.words('english'))
+    lemmatizer = WordNetLemmatizer()
+
     # Convert text to lowercase
     text = text.lower()
 
-    # Remove URLs
+    # Remove URLs, special characters, and digits
     text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\@w+|\#','', text)
+    text = re.sub(r'[^A-Za-z\s]', '', text)
+    text = re.sub(r'\d+', '', text)
 
-    # Remove HTML tags
-    text = re.sub(r'<.*?>', '', text)
+    # Tokenize and remove stopwords
+    tokens = text.split()
+    tokens = [word for word in tokens if word not in stop_words]
 
-    # Remove punctuation
-    text = re.sub(r'[^\w\s]', '', text)
+    # Lemmatize tokens
+    tokens = [lemmatizer.lemmatize(word) for word in tokens]
 
-    # Tokenize the text
-    words = nltk.word_tokenize(text)
+    return ' '.join(tokens)
 
-    # Remove stop words and lemmatize
-    words = [lemmatizer.lemmatize(word) for word in words if word not in stop_words]
+def prepare_data(df, text_column):
+    """ Preprocess the data by cleaning the text """
+    df[text_column] = df[text_column].astype(str)  # Ensure all entries are strings
+    df['cleaned_text'] = df[text_column].apply(clean_text)
+    return df
 
-    # Reconstruct text from cleaned words
-    return ' '.join(words)
-
-
-def vectorize_text(texts):
-    """Vectorizes text using TF-IDF."""
+def vectorize_text(text_series):
+    """ Vectorize the cleaned text using TF-IDF """
+    from sklearn.feature_extraction.text import TfidfVectorizer
     vectorizer = TfidfVectorizer(max_features=5000)
-    return vectorizer.fit_transform(texts)
+    X = vectorizer.fit_transform(text_series)
+    return X, vectorizer
 
-# Placeholder to demonstrate usage
-if __name__ == "__main__":
-    # Example usage with placeholder text data
-    sample_data = pd.DataFrame({
-        'text': ['Sample post pro Palestine', 'Sample post pro Israel']
-    })
-    sample_data['cleaned_text'] = sample_data['text'].apply(clean_text)
-    X = vectorize_text(sample_data['cleaned_text'])
-    print(X.shape)
+def train_test_split_data(df, target_column):
+    """ Split the data into training and testing sets """
+    from sklearn.model_selection import train_test_split
+    X_train, X_test, y_train, y_test = train_test_split(df['cleaned_text'], df[target_column], test_size=0.3, random_state=42)
+    return X_train, X_test, y_train, y_test
